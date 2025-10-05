@@ -1,63 +1,65 @@
 import streamlit as st
 import random
 
-st.set_page_config(page_title="Monty Hall - Card Edition", page_icon="🏆", layout="centered")
+st.set_page_config(page_title="Monty Hall - Card Flip", page_icon="🏆", layout="centered")
 
-st.title("🏆 Monty Hall Problem — Card Edition")
+st.title("🏆 Monty Hall Problem — Interactive Cards")
 st.write("""
-Pick one of the **three cards** — one hides a 🏆 **trophy (win)**, the other two hide ❌.  
-After your choice, Monty flips one losing card and asks if you want to **switch**.
+Click on one of the three cards. One hides a 🏆 trophy (win), the other two hide ❌.  
+After you pick, Monty will reveal a losing card and you can choose to **switch** or **stay**.
 """)
 
-cards = ["🂠", "🂠", "🂠"]
-trophy_position = random.randint(0, 2)
-chosen = st.radio("Choose a card:", [1, 2, 3], horizontal=True)
+# --- Initialize session state ---
+if "cards" not in st.session_state:
+    st.session_state.cards = ["🂠", "🂠", "🂠"]  # face-down
+if "trophy_pos" not in st.session_state:
+    st.session_state.trophy_pos = random.randint(0, 2)
+if "chosen" not in st.session_state:
+    st.session_state.chosen = None
+if "monty_flipped" not in st.session_state:
+    st.session_state.monty_flipped = None
+if "game_over" not in st.session_state:
+    st.session_state.game_over = False
 
-if st.button("Flip one losing card"):
-    losing_options = [i for i in range(3) if i != (chosen - 1) and i != trophy_position]
-    monty_flips = random.choice(losing_options)
-    st.write(f"Monty flips card **{monty_flips + 1}** revealing ❌")
+# --- Reset game ---
+if st.button("Reset Game"):
+    st.session_state.cards = ["🂠", "🂠", "🂠"]
+    st.session_state.trophy_pos = random.randint(0, 2)
+    st.session_state.chosen = None
+    st.session_state.monty_flipped = None
+    st.session_state.game_over = False
 
-    remaining = [i for i in range(3) if i not in [(chosen - 1), monty_flips]][0]
-    switch = st.radio("Do you want to switch?", ["Stay", "Switch"], horizontal=True)
-
-    final_choice = remaining if switch == "Switch" else (chosen - 1)
-    revealed_cards = ["🏆" if i == trophy_position else "❌" for i in range(3)]
-
-    st.write("Final result:")
-    cols = st.columns(3)
-    for i in range(3):
+# --- Display cards ---
+cols = st.columns(3)
+for i in range(3):
+    if st.session_state.game_over:
+        # Reveal all cards at the end
+        display = "🏆" if i == st.session_state.trophy_pos else "❌"
         with cols[i]:
-            st.metric(f"Card {i+1}", revealed_cards[i])
-
-    if final_choice == trophy_position:
-        st.success("🎉 You found the 🏆 trophy — you win!")
-        st.balloons()
+            st.button(display, disabled=True)
     else:
-        st.error("❌ You picked a losing card.")
+        with cols[i]:
+            if st.button(st.session_state.cards[i], key=f"card_{i}"):
+                if st.session_state.chosen is None:
+                    # Player chooses a card
+                    st.session_state.chosen = i
+                    # Monty flips a losing card
+                    losing_options = [j for j in range(3) if j != i and j != st.session_state.trophy_pos]
+                    st.session_state.monty_flipped = random.choice(losing_options)
+                    st.session_state.cards[st.session_state.monty_flipped] = "❌"
 
-st.divider()
-
-st.header("📊 Run automatic simulations")
-num_sims = st.slider("Number of simulations", 100, 100000, 1000, step=100)
-
-def monty_hall(simulations, switch=True):
-    wins = 0
-    for _ in range(simulations):
-        trophy = random.randint(0, 2)
-        choice = random.randint(0, 2)
-        losing = [i for i in range(3) if i != choice and i != trophy]
-        monty_flips = random.choice(losing)
-        if switch:
-            choice = [i for i in range(3) if i not in [choice, monty_flips]][0]
-        if choice == trophy:
-            wins += 1
-    return wins / simulations
-
-if st.button("Run simulation"):
-    switch_rate = monty_hall(num_sims, switch=True)
-    stay_rate = monty_hall(num_sims, switch=False)
-    st.metric("Winning % when Switching", f"{switch_rate*100:.2f}%")
-    st.metric("Winning % when Staying", f"{stay_rate*100:.2f}%")
-    st.info("📈 Switching should win about **66.7%** of the time.")
-
+# --- Switch or Stay ---
+if st.session_state.chosen is not None and not st.session_state.game_over:
+    remaining = [i for i in range(3) if i not in [st.session_state.chosen, st.session_state.monty_flipped]][0]
+    choice = st.radio("Do you want to stay or switch?", ["Stay", "Switch"])
+    if st.button("Reveal Cards"):
+        # Determine final choice
+        final_choice = st.session_state.chosen if choice == "Stay" else remaining
+        # Reveal all cards
+        st.session_state.cards = ["🏆" if i == st.session_state.trophy_pos else "❌" for i in range(3)]
+        st.session_state.game_over = True
+        if final_choice == st.session_state.trophy_pos:
+            st.success("🎉 You won the 🏆 trophy!")
+            st.balloons()
+        else:
+            st.error("❌ You picked a losing card.")
