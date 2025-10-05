@@ -1,0 +1,131 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "7cc63801-13f5-4278-ae2f-562c4dc427e6",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "2025-10-05 16:28:17.607 \n",
+      "  \u001b[33m\u001b[1mWarning:\u001b[0m to view this Streamlit app on a browser, run it with the following\n",
+      "  command:\n",
+      "\n",
+      "    streamlit run C:\\Users\\alle\\anaconda3\\Lib\\site-packages\\ipykernel_launcher.py [ARGUMENTS]\n"
+     ]
+    }
+   ],
+   "source": [
+    "# monty_hall_cards_app.py\n",
+    "import streamlit as st\n",
+    "import random\n",
+    "\n",
+    "# --- Page setup ---\n",
+    "st.set_page_config(page_title=\"Monty Hall - Card Edition\", page_icon=\"🏆\", layout=\"centered\")\n",
+    "\n",
+    "st.title(\"🏆 Monty Hall Problem — Card Edition\")\n",
+    "st.write(\"\"\"\n",
+    "Pick one of the **three cards** — one hides a 🏆 **trophy (win)**, the other two hide ❌.  \n",
+    "After your choice, Monty flips one losing card and asks if you want to **switch**.\n",
+    "\"\"\")\n",
+    "\n",
+    "# --- Game setup ---\n",
+    "cards = [\"🂠\", \"🂠\", \"🂠\"]  # face-down cards\n",
+    "trophy_position = random.randint(0, 2)\n",
+    "chosen = st.radio(\"Choose a card:\", [1, 2, 3], horizontal=True)\n",
+    "\n",
+    "if st.button(\"Flip one losing card\"):\n",
+    "    # Monty reveals a losing card that is not your pick or the trophy\n",
+    "    losing_options = [i for i in range(3) if i != (chosen - 1) and i != trophy_position]\n",
+    "    monty_flips = random.choice(losing_options)\n",
+    "\n",
+    "    revealed_cards = cards.copy()\n",
+    "    revealed_cards[monty_flips] = \"❌\"\n",
+    "\n",
+    "    st.write(f\"Monty flips card **{monty_flips + 1}** revealing ❌\")\n",
+    "\n",
+    "    # The remaining unopened card (for switching)\n",
+    "    remaining = [i for i in range(3) if i not in [(chosen - 1), monty_flips]][0]\n",
+    "\n",
+    "    switch = st.radio(\"Do you want to switch?\", [\"Stay\", \"Switch\"], horizontal=True)\n",
+    "\n",
+    "    final_choice = remaining if switch == \"Switch\" else (chosen - 1)\n",
+    "\n",
+    "    # Reveal all cards\n",
+    "    revealed_cards = [\"🏆\" if i == trophy_position else \"❌\" for i in range(3)]\n",
+    "\n",
+    "    st.write(\"Final result:\")\n",
+    "    cols = st.columns(3)\n",
+    "    for i in range(3):\n",
+    "        with cols[i]:\n",
+    "            st.metric(f\"Card {i+1}\", revealed_cards[i])\n",
+    "\n",
+    "    if final_choice == trophy_position:\n",
+    "        st.success(\"🎉 You found the 🏆 trophy — you win!\")\n",
+    "        st.balloons()\n",
+    "    else:\n",
+    "        st.error(\"❌ You picked a losing card.\")\n",
+    "\n",
+    "st.divider()\n",
+    "\n",
+    "# --- Simulation mode ---\n",
+    "st.header(\"📊 Run automatic simulations\")\n",
+    "\n",
+    "num_sims = st.slider(\"Number of simulations\", 100, 100000, 1000, step=100)\n",
+    "\n",
+    "def monty_hall(simulations, switch=True):\n",
+    "    wins = 0\n",
+    "    for _ in range(simulations):\n",
+    "        trophy = random.randint(0, 2)\n",
+    "        choice = random.randint(0, 2)\n",
+    "        losing = [i for i in range(3) if i != choice and i != trophy]\n",
+    "        monty_flips = random.choice(losing)\n",
+    "        if switch:\n",
+    "            choice = [i for i in range(3) if i not in [choice, monty_flips]][0]\n",
+    "        if choice == trophy:\n",
+    "            wins += 1\n",
+    "    return wins / simulations\n",
+    "\n",
+    "if st.button(\"Run simulation\"):\n",
+    "    switch_rate = monty_hall(num_sims, switch=True)\n",
+    "    stay_rate = monty_hall(num_sims, switch=False)\n",
+    "\n",
+    "    st.metric(\"Winning % when Switching\", f\"{switch_rate*100:.2f}%\")\n",
+    "    st.metric(\"Winning % when Staying\", f\"{stay_rate*100:.2f}%\")\n",
+    "    st.info(\"📈 Switching should win about **66.7%** of the time.\")\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "19f70e83-5b49-4e7f-9644-f1f6a82df68e",
+   "metadata": {},
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python [conda env:base] *",
+   "language": "python",
+   "name": "conda-base-py"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.12.4"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
