@@ -111,9 +111,10 @@ if st.session_state.experiment_rounds < max_experiment_rounds or phase_type == 0
         else:
             emoji = "🂠"
 
+        # Replace the original card in the same column
         col.markdown(f"<h1 style='font-size:14rem; text-align:center'>{emoji}</h1>", unsafe_allow_html=True)
 
-        # Handle button clicks only if game not over
+        # Handle button clicks only if game not over or reveal_all
         if not st.session_state.game_over and st.session_state.phase != "reveal_all":
             if col.button("Pick", key=f"card_{i}", use_container_width=True):
                 # --- First pick ---
@@ -130,13 +131,12 @@ if st.session_state.experiment_rounds < max_experiment_rounds or phase_type == 0
                     st.session_state.phase = "reveal_all"
                     st.session_state.game_over = True
 
-                    # --- Reveal all cards ---
-                    cols_reveal = st.columns(3)
-                    for j, col2 in enumerate(cols_reveal):
+                    # --- Update the same columns for reveal ---
+                    for j, reveal_col in enumerate(cols):
                         emoji = "🏆" if j == st.session_state.trophy_pos else "❌"
-                        col2.markdown(f"<h1 style='font-size:14rem; text-align:center'>{emoji}</h1>", unsafe_allow_html=True)
+                        reveal_col.markdown(f"<h1 style='font-size:14rem; text-align:center'>{emoji}</h1>", unsafe_allow_html=True)
 
-                    # --- Display results above cards ---
+                    # --- Display results above the cards ---
                     won = st.session_state.second_choice == st.session_state.trophy_pos
                     st.subheader("Result:")
                     if won:
@@ -150,6 +150,7 @@ if st.session_state.experiment_rounds < max_experiment_rounds or phase_type == 0
                             st.info("💡 You should have stayed to win.")
                         else:
                             st.info("💡 You should have switched to win.")
+
 
                     # --- Log the round ---
                     round_number = len(st.session_state.log_df[st.session_state.log_df["phase_type"] == phase_type]) + 1
