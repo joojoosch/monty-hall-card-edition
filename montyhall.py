@@ -33,6 +33,18 @@ if "log_df" not in st.session_state:
 
 max_experiment_rounds = 20
 
+# --- Show instructions only before starting trial/experiment ---
+if st.session_state.trial_mode is None:
+    st.title("🏆 Card Game Experiment")
+    st.write("""
+Your goal is to find the card with the trophy 🏆.
+
+1️⃣ Choose a card.  
+2️⃣ One of the NOT chosen cards will be revealed.  
+3️⃣ Choose to stick with your choice or switch the card.  
+The winning trophy card is then revealed!
+""")
+
 # --- Ask for name ---
 if st.session_state.player_name is None:
     name_input = st.text_input("Enter your first and last name to start:", key="name_input")
@@ -46,7 +58,7 @@ if st.session_state.player_name is None:
 
 player_name = st.session_state.player_name
 
-# --- Trial mode selection ---
+# --- Trial or Experiment selection ---
 if st.session_state.trial_mode is None:
     st.write("Do you want to do trial runs first?")
     col1, col2 = st.columns(2)
@@ -60,7 +72,21 @@ if st.session_state.trial_mode is None:
 
 phase_type = 0 if st.session_state.trial_mode else 1
 
-# --- Reset the game ---
+# --- Stop trial runs box ---
+if st.session_state.trial_mode and st.session_state.phase != "pick_first":
+    with st.sidebar:
+        st.subheader("Trial Runs Control")
+        if st.button("Stop trials and start real experiment"):
+            st.session_state.trial_mode = False
+            st.session_state.experiment_rounds = 0
+            st.session_state.phase = "pick_first"
+            st.session_state.game_over = False
+            st.session_state.cards = ["🂠"]*3
+            st.session_state.trophy_pos = random.randint(0,2)
+            st.success("Real experiment started!")
+            st.rerun()
+
+# --- Reset game function ---
 def reset_game():
     st.session_state.cards = ["🂠"]*3
     st.session_state.trophy_pos = random.randint(0,2)
@@ -86,17 +112,15 @@ for i, col in enumerate(cols):
 
     # Button for picking the card
     if col.button("Pick", key=f"card_{i}", use_container_width=True):
-        # --- First pick ---
         if st.session_state.phase=="pick_first":
             st.session_state.first_choice = i
             st.session_state.phase="reveal_monty"
-            st.write("Monty is thinking...")
+            st.write("The card is being revealed...")  # <-- changed message
             time.sleep(1.5)
             losing_cards = [j for j in range(3) if j!=i and j!=st.session_state.trophy_pos]
             st.session_state.monty_flipped = random.choice(losing_cards)
             st.session_state.phase="pick_second"
 
-        # --- Second pick ---
         elif st.session_state.phase=="pick_second" and i!=st.session_state.monty_flipped:
             st.session_state.second_choice = i
             st.session_state.phase="reveal_all"
@@ -129,33 +153,8 @@ if st.session_state.game_over:
         else:
             st.info("💡 You should have switched to win.")
 
-    # Wait 3 seconds before automatically starting next round
+    # Pause 3 seconds, then reset for next round
     time.sleep(3)
-    if phase_type==0 or st.session_state.experiment_rounds < max_experiment_rounds:
-        reset_game()
-        if phase_type==0:
-            st.write("Start next trial round.")
-    if not phase_type:
-        st.session_state.experiment_rounds += 1
+    reset_game()
     st.experimental_rerun()
 
-# --- After 20 rounds in experiment ---
-if not st.session_state.trial_mode and st.session_state.experiment_rounds>=max_experiment_rounds:
-    st.write("✅ You have finished the experiment!")
-    total_correct = st.session_state.log_df[st.session_state.log_df["phase_type"]==1]["won"].sum()
-    total_wrong = max_experiment_rounds - total_correct
-    st.write(f"Correct picks: {total_correct}")
-    st.write(f"Wrong picks: {total_wrong}")
-
-    # Automatically save to GitHub
-    try:
-        token = st.secrets["GITHUB_TOKEN"]
-        g = Github(token)
-        repo = g.get_repo("joojoosch/monty-hall-card-edition")
-        csv_data = st.session_state.log_df.to_csv(index=False)
-        path = f"player_logs/{player_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        repo.create_file(path, f"Add results for {player_name}", csv_data)
-        st.success(f"Results saved to GitHub as {path}")
-    except Exception as e:
-        st.error(f"⚠️ Couldn't save: {e}")
-    st.stop()
