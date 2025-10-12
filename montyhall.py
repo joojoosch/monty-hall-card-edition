@@ -31,6 +31,8 @@ if "game_over" not in st.session_state:
 if "log_df" not in st.session_state:
     st.session_state.log_df = pd.DataFrame(columns=["first_choice","monty_flipped","second_choice","won","phase_type"])
 
+max_experiment_rounds = 20
+
 # --- Ask for name ---
 if st.session_state.player_name is None:
     name_input = st.text_input("Enter your first and last name to start:", key="name_input")
@@ -40,7 +42,7 @@ if st.session_state.player_name is None:
             st.rerun()
         else:
             st.warning("Please enter a valid name.")
-    st.stop()  # stop until name is entered
+    st.stop()
 
 player_name = st.session_state.player_name
 
@@ -50,14 +52,15 @@ if st.session_state.trial_mode is None:
     col1, col2 = st.columns(2)
     if col1.button("Yes, trial runs"):
         st.session_state.trial_mode = True
+        st.rerun()
     if col2.button("No, start experiment"):
         st.session_state.trial_mode = False
+        st.rerun()
     st.stop()
 
 phase_type = 0 if st.session_state.trial_mode else 1
-max_experiment_rounds = 20
 
-# --- Reset the game function ---
+# --- Reset the game ---
 def reset_game():
     st.session_state.cards = ["🂠"]*3
     st.session_state.trophy_pos = random.randint(0,2)
@@ -78,8 +81,11 @@ for i, col in enumerate(cols):
     else:
         emoji = "🂠"
 
-    # Large clickable buttons
-    if col.button(f"<h1 style='font-size:14rem'>{emoji}</h1>", key=f"card_{i}", unsafe_allow_html=True):
+    # Show card visually
+    col.markdown(f"<h1 style='font-size:14rem; text-align:center'>{emoji}</h1>", unsafe_allow_html=True)
+
+    # Button for picking the card
+    if col.button("Pick", key=f"card_{i}", use_container_width=True):
         # --- First pick ---
         if st.session_state.phase=="pick_first":
             st.session_state.first_choice = i
@@ -123,16 +129,15 @@ if st.session_state.game_over:
         else:
             st.info("💡 You should have switched to win.")
 
-    # Automatic reveal and wait 3 seconds before resetting for next round
-    st.session_state.phase="reveal_all"
-    st.experimental_rerun()
+    # Wait 3 seconds before automatically starting next round
     time.sleep(3)
-    if phase_type==0 or st.session_state.experiment_rounds<max_experiment_rounds:
+    if phase_type==0 or st.session_state.experiment_rounds < max_experiment_rounds:
         reset_game()
-        if not phase_type:
+        if phase_type==0:
             st.write("Start next trial round.")
     if not phase_type:
         st.session_state.experiment_rounds += 1
+    st.experimental_rerun()
 
 # --- After 20 rounds in experiment ---
 if not st.session_state.trial_mode and st.session_state.experiment_rounds>=max_experiment_rounds:
@@ -154,5 +159,3 @@ if not st.session_state.trial_mode and st.session_state.experiment_rounds>=max_e
     except Exception as e:
         st.error(f"⚠️ Couldn't save: {e}")
     st.stop()
-
-
