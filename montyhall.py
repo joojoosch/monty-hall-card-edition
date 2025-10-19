@@ -6,7 +6,7 @@ from github import Github
 
 st.set_page_config(page_title="Card Game Experiment", page_icon="🏆", layout="wide")
 
-max_experiment_rounds = 20
+max_experiment_rounds = 3
 
 # --- Initialize session state ---
 if "player_name" not in st.session_state:
@@ -93,6 +93,10 @@ def get_card_emojis():
             emojis.append("🂠")
     return emojis
 
+# --- Display current round header if real experiment ---
+if not st.session_state.trial_mode:
+    st.header(f"Round {st.session_state.experiment_rounds + 1} / {max_experiment_rounds}")
+
 # --- Display cards ---
 if st.session_state.experiment_rounds < max_experiment_rounds or phase_type == 0:
     cols = st.columns(3)
@@ -145,10 +149,13 @@ if st.session_state.game_over:
         st.session_state.log_df = pd.concat([st.session_state.log_df, new_row], ignore_index=True)
         st.session_state.logged_this_round = True
 
-    # --- Buttons: Again & Start Real Experiment (if trial) ---
+    # --- Buttons: Again / Next Round & Start Real Experiment (if trial) ---
     col1, col2 = st.columns(2)
+    # Dynamic button label
+    next_button_label = "Next Round" if not st.session_state.trial_mode else "🔄 Again"
+
     with col1:
-        if st.button("🔄 Again"):
+        if st.button(next_button_label):
             st.session_state.logged_this_round = False
             if phase_type == 0:
                 reset_game()
@@ -175,6 +182,7 @@ if st.session_state.game_over:
                     except Exception as e:
                         st.error(f"⚠️ Couldn't save: {e}")
             st.rerun()
+
     # Show Start Real Experiment button only if currently in trial
     if st.session_state.trial_mode:
         with col2:
@@ -190,6 +198,7 @@ if st.session_state.game_over:
 st.divider()
 st.subheader("📊 Game Log")
 st.dataframe(st.session_state.log_df, use_container_width=True)
+
 
 
 
