@@ -1,25 +1,25 @@
-import streamlit as st
-import random
-import time
-import pandas as pd
-from datetime import datetime
-from github import Github
+import streamlit as st #for the app
+import random #for the random selection of the winning card
+import time 
+import pandas as pd #for the dataframes
+from datetime import datetime #for the filenames
+from github import Github # for getting the csv to my github
 
 st.set_page_config(page_title="Card Game Experiment", page_icon="🏆", layout="wide")
 
 max_experiment_rounds = 20
 
-# --- Initialize session state ---
+# --- Initializing all the session states ---
 if "player_name" not in st.session_state:
     st.session_state.player_name = None
 if "trial_mode" not in st.session_state:
-    st.session_state.trial_mode = None
+    st.session_state.trial_mode = None #TRUE for trial mode and FALSE for real experiment
 if "experiment_rounds" not in st.session_state:
-    st.session_state.experiment_rounds = 0
+    st.session_state.experiment_rounds = 0 #completed experiment rounds
 if "cards" not in st.session_state:
     st.session_state.cards = ["🂠"]*3
 if "trophy_pos" not in st.session_state:
-    st.session_state.trophy_pos = random.randint(0,2)
+    st.session_state.trophy_pos = random.randint(0,2) #position of the winning card
 if "first_choice" not in st.session_state:
     st.session_state.first_choice = None
 if "flipped_card" not in st.session_state:
@@ -27,7 +27,7 @@ if "flipped_card" not in st.session_state:
 if "second_choice" not in st.session_state:
     st.session_state.second_choice = None
 if "phase" not in st.session_state:
-    st.session_state.phase = "first_pick"
+    st.session_state.phase = "first_pick" #first_pick, second_pick, reveal_all
 if "game_over" not in st.session_state:
     st.session_state.game_over = False
 if "log_df" not in st.session_state:
@@ -44,15 +44,15 @@ def reset_game():
     st.session_state.game_over = False
 
 # --- Instructions and name input ---
-if st.session_state.trial_mode is None:
+if st.session_state.trial_mode is None: #only shows this if you are neither in trial nor test mode
     st.title("🏆 Card Game Experiment")
     st.write("""
 Instructions:
-You will be shown three cards and your goal is to find the card with the trophy 🏆.
+You will be shown three cards and your goal is to find the card with the trophy 🏆 behind it.
 
 1️⃣ Choose a card.  
-2️⃣ One of the NOT chosen cards will be revealed.  
-3️⃣ Choose to stick with your choice or switch the card.  
+2️⃣ One of the NOT chosen cards will then be revealed.  
+3️⃣ Choose to stick with your choice or switch to the other card.  
 The winning trophy card is then revealed!
 """)
 
@@ -70,7 +70,7 @@ player_name = st.session_state.player_name
 
 # --- Trial or experiment selection ---
 if st.session_state.trial_mode is None:
-    st.write("Do you want to do trial runs first?")
+    st.write("Do you want to do a few trial runs first?")
     col1, col2 = st.columns(2)
     if col1.button("Yes, trial runs"):
         st.session_state.trial_mode = True
@@ -80,17 +80,17 @@ if st.session_state.trial_mode is None:
         st.rerun()
     st.stop()
 
-phase_type = 0 if st.session_state.trial_mode else 1
+phase_type = 0 if st.session_state.trial_mode else 1 #0 equals trials
 
 # --- Trial sidebar control ---
-if st.session_state.trial_mode and st.session_state.phase != "first_pick":
+if st.session_state.trial_mode and st.session_state.phase == "first_pick":
     with st.sidebar:
         st.subheader("Trial Runs Control")
         if st.button("Stop trials and start real experiment"):
             st.session_state.trial_mode = False
             st.session_state.experiment_rounds = 0
             reset_game()
-            st.success("Real experiment started!")
+            st.success("Real experiment started you have 20 rounds to complete!")
             st.rerun()
 
 # --- Determine emojis for each card ---
@@ -99,27 +99,13 @@ def get_card_emojis():
     for i in range(3):
         if st.session_state.phase == "reveal_all" or st.session_state.game_over:
             emojis.append("🏆" if i == st.session_state.trophy_pos else "❌")
-        elif st.session_state.phase == "second_pick" and i == st.session_state.flipped_card:
-            emojis.append("❌")
+        elif st.session_state.phase == "second_pick":
+            emojis.append("❌" if i == st.session_state.flipped_card else "🂠")
         else:
             emojis.append("🂠")
     return emojis
 
-# --- Display results above cards ---
-if st.session_state.game_over:
-    won = st.session_state.second_choice == st.session_state.trophy_pos
-    st.subheader("Result:")
-    if won:
-        st.success("🎉 You won the 🏆 trophy!")
-        st.balloons()
-    else:
-        st.error("❌ You picked a losing card. 😢")
-        first = st.session_state.first_choice
-        trophy = st.session_state.trophy_pos
-        if first == trophy:
-            st.info("💡 You should have stayed to win.")
-        else:
-            st.info("💡 You should have switched to win.")
+
 
 # --- Display cards ---
 if st.session_state.experiment_rounds < max_experiment_rounds or phase_type == 0:
@@ -139,7 +125,25 @@ if st.session_state.experiment_rounds < max_experiment_rounds or phase_type == 0
             elif st.session_state.phase == "second_pick" and i != st.session_state.flipped_card:
                 st.session_state.second_choice = i
                 st.session_state.phase = "reveal_all"
+            # --- Reveal all ---   
+            elif st.session_state.phase == "reveal_all":
                 st.session_state.game_over = True
+            
+                # --- Display results above cards ---
+        if st.session_state.game_over:
+            won = st.session_state.second_choice == st.session_state.trophy_pos
+            st.subheader("Result:")
+            if won:
+                st.success("🎉 You won the 🏆 trophy!")
+                st.balloons()
+            else:
+                st.error("❌ You picked the wrong card. 😢")
+                first = st.session_state.first_choice
+                trophy = st.session_state.trophy_pos
+                if first == trophy:
+                    st.info("💡 You should have stayed to win.")
+                else:
+                    st.info("💡 You should have switched to win.")
 
                 # --- Log the round ---
                 won = st.session_state.second_choice == st.session_state.trophy_pos
@@ -180,6 +184,8 @@ if st.session_state.experiment_rounds < max_experiment_rounds or phase_type == 0
                             st.success(f"Results saved to GitHub as {path}")
                         except Exception as e:
                             st.error(f"⚠️ Couldn't save: {e}")
+
+
 
 # --- Show game log ---
 st.divider()
