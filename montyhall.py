@@ -47,11 +47,11 @@ if st.session_state.trial_mode is None:
     st.title("🏆 Card Game Experiment")
     st.write("""
 Instructions:
-You will be shown three cards and your goal is to find the card with the trophy 🏆 behind it.
+You will be shown three cards and your goal is to find the trophy 🏆 behind one of them.
 
 1️⃣ Choose a card.  
-2️⃣ One of the NOT chosen cards will then be revealed.  
-3️⃣ Choose to stick with your choice or switch to the other card.  
+2️⃣ One of the NOT chosen cards will be revealed.  
+3️⃣ Choose to stick with your choice or switch.  
 The winning trophy card is then revealed!
 """)
 
@@ -80,17 +80,6 @@ if st.session_state.trial_mode is None:
     st.stop()
 
 phase_type = 0 if st.session_state.trial_mode else 1
-
-# --- Trial sidebar control ---
-if st.session_state.trial_mode and st.session_state.phase == "first_pick":
-    with st.sidebar:
-        st.subheader("Trial Runs Control")
-        if st.button("Stop trials and start real experiment"):
-            st.session_state.trial_mode = False
-            st.session_state.experiment_rounds = 0
-            reset_game()
-            st.success("Real experiment started you have 20 rounds to complete!")
-            st.rerun()
 
 # --- Determine emojis for each card ---
 def get_card_emojis():
@@ -125,7 +114,7 @@ if st.session_state.experiment_rounds < max_experiment_rounds or phase_type == 0
                 st.session_state.game_over = True
                 st.rerun()
 
-# --- Display results and “Next Round” button ---
+# --- Display results and control buttons ---
 if st.session_state.game_over:
     # --- Display result ---
     won = st.session_state.second_choice == st.session_state.trophy_pos
@@ -142,48 +131,63 @@ if st.session_state.game_over:
         else:
             st.info("💡 You should have switched to win.")
 
-    # --- Log the round ---
-    round_number = len(st.session_state.log_df[st.session_state.log_df["phase_type"]==phase_type]) + 1
-    new_row = pd.DataFrame([{
-        "round_number": round_number,
-        "first_choice": st.session_state.first_choice,
-        "flipped_card": st.session_state.flipped_card,
-        "second_choice": st.session_state.second_choice,
-        "result": won,
-        "phase_type": phase_type
-    }])
-    st.session_state.log_df = pd.concat([st.session_state.log_df, new_row], ignore_index=True)
+    # --- Log the round (only once) ---
+    if "logged_this_round" not in st.session_state or not st.session_state.logged_this_round:
+        round_number = len(st.session_state.log_df[st.session_state.log_df["phase_type"]==phase_type]) + 1
+        new_row = pd.DataFrame([{
+            "round_number": round_number,
+            "first_choice": st.session_state.first_choice,
+            "flipped_card": st.session_state.flipped_card,
+            "second_choice": st.session_state.second_choice,
+            "result": won,
+            "phase_type": phase_type
+        }])
+        st.session_state.log_df = pd.concat([st.session_state.log_df, new_row], ignore_index=True)
+        st.session_state.logged_this_round = True  # flag to prevent double logging
 
-    # --- Next Round button ---
-    if st.button("➡️ Next Round"):
-        if phase_type == 0:  # trial mode
-            reset_game()
-        else:
-            st.session_state.experiment_rounds += 1
-            if st.session_state.experiment_rounds < max_experiment_rounds:
+    # --- Buttons: Next Round & Go to Real Experiment ---
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("➡️ Next Round"):
+            st.session_state.logged_this_round = False
+            if phase_type == 0:  # trial mode
                 reset_game()
             else:
-                st.subheader("✅ You have finished the experiment!")
-                total_correct = st.session_state.log_df[st.session_state.log_df["phase_type"]==1]["result"].sum()
-                total_wrong = max_experiment_rounds - total_correct
-                st.write(f"Correct picks: {total_correct}")
-                st.write(f"Wrong picks: {total_wrong}")
+                st.session_state.experiment_rounds += 1
+                if st.session_state.experiment_rounds < max_experiment_rounds:
+                    reset_game()
+                else:
+                    st.subheader("✅ You have finished the experiment!")
+                    total_correct = st.session_state.log_df[st.session_state.log_df["phase_type"]==1]["result"].sum()
+                    total_wrong = max_experiment_rounds - total_correct
+                    st.write(f"Correct picks: {total_correct}")
+                    st.write(f"Wrong picks: {total_wrong}")
 
-                # Save CSV to GitHub
-                try:
-                    token = st.secrets["GITHUB_TOKEN"]
-                    g = Github(token)
-                    repo = g.get_repo("joojoosch/monty-hall-card-edition")
-                    csv_data = st.session_state.log_df.to_csv(index=False)
-                    path = f"player_logs/{st.session_state.player_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-                    repo.create_file(path, f"Add results for {st.session_state.player_name}", csv_data)
-                    st.success(f"Results saved to GitHub as {path}")
-                except Exception as e:
-                    st.error(f"⚠️ Couldn't save: {e}")
-        st.rerun()
+                    # Save CSV to GitHub
+                    try:
+                        token = st.secrets["GITHUB_TOKEN"]
+                        g = Github(token)
+                        repo = g.get_repo("joojoosch/monty-hall-card-edition")
+                        csv_data = st.session_state.log_df.to_csv(index=False)
+                        path = f"player_logs/{st.session_state.player_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                        repo.create_file(path, f"Add results for {st.session_state.player_name}", csv_data)
+                        st.success(f"Results saved to GitHub as {path}")
+                    except Exception as e:
+                        st.error(f"⚠️ Couldn't save: {e}")
+            st.rerun()
+    with col2:
+        if st.button("🚀 Go to Real Experiment"):
+            st.session_state.trial_mode = False
+            st.session_state.experiment_rounds = 0
+            st.session_state.logged_this_round = False
+            reset_game()
+            st.success("Trial ended. Real experiment started — 20 rounds to complete!")
+            st.rerun()
 
 # --- Show game log ---
 st.divider()
 st.subheader("📊 Game Log")
 st.dataframe(st.session_state.log_df, use_container_width=True)
+
+
 
