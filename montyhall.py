@@ -121,10 +121,13 @@ if st.session_state.experiment_rounds < max_experiment_rounds or phase_type == 0
                 losing_cards = [j for j in range(3) if j != i and j != st.session_state.trophy_pos]
                 st.session_state.flipped_card = random.choice(losing_cards)
                 st.session_state.phase = "second_pick"
+                st.rerun()
             # --- Second pick ---
             elif st.session_state.phase == "second_pick" and i != st.session_state.flipped_card:
                 st.session_state.second_choice = i
                 st.session_state.phase = "reveal_all"
+                st.session_state.game_over = True
+                st.rerun()  
             # --- Reveal all ---   
             elif st.session_state.phase == "reveal_all":
                 st.session_state.game_over = True
@@ -162,10 +165,12 @@ if st.session_state.experiment_rounds < max_experiment_rounds or phase_type == 0
                 time.sleep(3)
                 if phase_type == 0:
                     reset_game()
+                    st.rerun()
                 else:
                     st.session_state.experiment_rounds += 1
                     if st.session_state.experiment_rounds < max_experiment_rounds:
                         reset_game()
+                        st.rerun()
                     else:
                         st.subheader("✅ You have finished the experiment!")
                         total_correct = st.session_state.log_df[st.session_state.log_df["phase_type"]==1]["result"].sum()
