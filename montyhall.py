@@ -35,6 +35,8 @@ if "experiment_finished" not in st.session_state:
     st.session_state.experiment_finished = False
 if "logged_this_round" not in st.session_state:
     st.session_state.logged_this_round = False
+if "ready_page" not in st.session_state:
+    st.session_state.ready_page = False  # New flag for the ready page
 
 # --- Reset game function ---
 def reset_game():
@@ -48,7 +50,7 @@ def reset_game():
     st.session_state.logged_this_round = False
 
 # --- Instructions and name input ---
-if st.session_state.trial_mode is None:
+if st.session_state.trial_mode is None and not st.session_state.ready_page:
     st.title("🏆 Card Game Experiment")
     st.write("""
 Instructions:
@@ -73,18 +75,38 @@ if st.session_state.player_name is None:
 player_name = st.session_state.player_name
 
 # --- Trial or experiment selection ---
-if st.session_state.trial_mode is None:
+if st.session_state.trial_mode is None and not st.session_state.ready_page:
     st.write("Do you want to do a few trial runs first?")
     col1, col2 = st.columns(2)
     if col1.button("Yes, trial runs"):
         st.session_state.trial_mode = True
         st.rerun()
     if col2.button("No, start experiment"):
-        st.session_state.trial_mode = False
+        st.session_state.ready_page = True  # Show ready page first
         st.rerun()
     st.stop()
 
 phase_type = 0 if st.session_state.trial_mode else 1
+
+# --- Ready page for real experiment ---
+if st.session_state.ready_page:
+    st.title("🚀 Are you ready for the real experiment?")
+    st.write(f"You will complete {max_experiment_rounds} rounds.")
+    st.write("""
+Instructions (again):
+1️⃣ Choose a card.  
+2️⃣ One of the NOT chosen cards will be revealed.  
+3️⃣ Choose to stick with your choice or switch.  
+The winning trophy card is then revealed!
+""")
+    if st.button("✅ Start Real Experiment"):
+        st.session_state.trial_mode = False
+        st.session_state.experiment_rounds = 0
+        st.session_state.ready_page = False
+        reset_game()
+        st.success(f"Real experiment started — {max_experiment_rounds} rounds to complete!")
+        st.rerun()
+    st.stop()
 
 # --- Determine emojis for each card ---
 def get_card_emojis():
@@ -109,13 +131,19 @@ if st.session_state.experiment_finished:
     st.stop()
 
 # --- Display header depending on phase ---
-if not st.session_state.trial_mode and not st.session_state.experiment_finished:
-    if st.session_state.experiment_rounds >= max_experiment_rounds:
-        st.header("You have completed all rounds")
-    elif st.session_state.phase == "first_pick":
-        st.header("Pick your first card")
-    elif st.session_state.phase == "second_pick":
-        st.header("Now that one card has been revealed, stick with or switch your card")
+header_text = ""
+if st.session_state.phase == "first_pick":
+    header_text = "Pick your first card"
+elif st.session_state.phase == "second_pick":
+    header_text = "Pick Again (same or new card)"
+elif st.session_state.phase == "reveal_all" and not st.session_state.trial_mode:
+    header_text = f"Round {st.session_state.experiment_rounds + 1}: Reveal"
+
+if not st.session_state.trial_mode and st.session_state.phase != "reveal_all":
+    header_text = f"Round {st.session_state.experiment_rounds + 1}: {header_text}"
+
+if header_text and not st.session_state.experiment_finished:
+    st.header(header_text)
 
 # --- Display cards ---
 if not st.session_state.experiment_finished and (st.session_state.experiment_rounds < max_experiment_rounds or phase_type == 0):
@@ -127,14 +155,12 @@ if not st.session_state.experiment_finished and (st.session_state.experiment_rou
             unsafe_allow_html=True
         )
         if not st.session_state.game_over and col.button("Pick", key=f"card_{i}", use_container_width=True):
-            # --- First pick ---
             if st.session_state.phase == "first_pick":
                 st.session_state.first_choice = i
                 losing_cards = [j for j in range(3) if j != i and j != st.session_state.trophy_pos]
                 st.session_state.flipped_card = random.choice(losing_cards)
                 st.session_state.phase = "second_pick"
                 st.rerun()
-            # --- Second pick ---
             elif st.session_state.phase == "second_pick" and i != st.session_state.flipped_card:
                 st.session_state.second_choice = i
                 st.session_state.phase = "reveal_all"
@@ -143,11 +169,10 @@ if not st.session_state.experiment_finished and (st.session_state.experiment_rou
 
 # --- Display results and control buttons ---
 if st.session_state.game_over:
-    # Determine win/loss
+    st.header("Result:")
     won = st.session_state.second_choice == st.session_state.trophy_pos
     stayed = st.session_state.first_choice == st.session_state.second_choice
 
-    st.subheader("Result:")
     if won:
         if stayed:
             st.success("🎉 You won the 🏆 trophy because you stayed with your first choice!")
@@ -162,7 +187,6 @@ if st.session_state.game_over:
         else:
             st.info("💡 You should have switched to win.")
 
-    # --- Log the round (only once) ---
     if not st.session_state.logged_this_round:
         round_number = len(st.session_state.log_df[st.session_state.log_df["phase_type"]==phase_type]) + 1
         new_row = pd.DataFrame([{
@@ -177,12 +201,9 @@ if st.session_state.game_over:
         st.session_state.logged_this_round = True
 
     col1, col2 = st.columns(2)
-
-    # --- Show summary button if last round ---
     if not st.session_state.trial_mode and st.session_state.experiment_rounds + 1 >= max_experiment_rounds:
         with col1:
             if st.button("📊 Show Summary"):
-                # --- Save CSV to GitHub ---
                 try:
                     token = st.secrets["GITHUB_TOKEN"]
                     g = Github(token)
@@ -208,21 +229,15 @@ if st.session_state.game_over:
                     if st.session_state.experiment_rounds < max_experiment_rounds:
                         reset_game()
                 st.rerun()
-
-    # --- Start real experiment button if trial ---
-    if st.session_state.trial_mode:
-        with col2:
-            if st.button("🚀 Start Real Experiment"):
-                st.session_state.trial_mode = False
-                st.session_state.experiment_rounds = 0
-                reset_game()
-                st.success("Trial ended. Real experiment started — 20 rounds to complete!")
-                st.rerun()
+        if st.session_state.trial_mode:
+            with col2:
+                if st.button("🚀 Ready for Real Experiment"):
+                    st.session_state.ready_page = True
+                    st.rerun()
 
 # --- Show game log ---
 st.divider()
 st.subheader("📊 Game Log")
 st.dataframe(st.session_state.log_df, use_container_width=True)
-
 
 
