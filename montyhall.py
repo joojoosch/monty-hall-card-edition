@@ -1,7 +1,8 @@
 import streamlit as st
 import random
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
+import time
 from github import Github
 
 st.set_page_config(page_title="Card Game Experiment", page_icon="🏆", layout="wide")
@@ -54,7 +55,7 @@ if "current_block_index" not in st.session_state:
 if "block_timer_start" not in st.session_state:
     st.session_state.block_timer_start = None
 
-# --- Reset game function ---
+# --- Reset game ---
 def reset_game():
     st.session_state.cards = ["🂠"]*3
     st.session_state.trophy_pos = random.randint(0,2)
@@ -65,7 +66,7 @@ def reset_game():
     st.session_state.game_over = False
     st.session_state.logged_this_round = False
 
-# --- Instructions and name input ---
+# --- Instructions, name, points explanation, contact info ---
 if st.session_state.trial_mode is None and not st.session_state.ready_page:
     st.title("🏆 Card Game Experiment")
     st.write("""
@@ -78,55 +79,18 @@ You will be shown three cards and your goal is to find the trophy 🏆 behind on
 The winning trophy card is then revealed!
 """)
 
-if st.session_state.player_name is None:
-    name_input = st.text_input("Enter your first and last name:", key="name_input")
-    if st.button("✅ Confirm Name"):
-        if name_input.strip() != "":
-            st.session_state.player_name = name_input.strip()
-            st.rerun()
-        else:
-            st.warning("Please enter a valid name.")
-    st.stop()
-
-player_name = st.session_state.player_name
-
-# --- Trial or experiment selection ---
-if st.session_state.trial_mode is None and not st.session_state.ready_page:
-    st.write("Do you want to do a few trial runs first?")
-    col1, col2 = st.columns(2)
-    if col1.button("Yes, trial runs"):
-        st.session_state.trial_mode = True
-        st.rerun()
-    if col2.button("No, start experiment"):
-        st.session_state.ready_page = True
-        st.rerun()
-    st.stop()
-
-phase_type = 0 if st.session_state.trial_mode else 1
-current_block = st.session_state.blocks[st.session_state.current_block_index]
-
-# --- Ready page for real experiment ---
-if st.session_state.ready_page:
-    st.title(f"🚀 Block {current_block['block_number']} Instructions")
-    st.write(f"You will complete {max_rounds_per_block} rounds in this block.")
-
-    if current_block["time_pressure"]:
-        st.warning(f"This block has **time pressure**! You have {time_per_block_seconds//60} minutes to complete 20 rounds.")
-    else:
-        st.info("This block has **no time pressure**. Take your time!")
-
     st.subheader("🏆 Win a prize based on your points!")
     st.write("""
 You have the chance to win a prize as one of the top three scorers at the end of the experiment!  
 
-Here's how the points system works:  
+**Points system:**
 - You **start with 50 points** at the beginning of the first round.  
 - Every time you pick the **trophy card correctly**, you earn **100 points**.  
 - If you pick the **wrong card**, you get **0 points**.
-- If you want to **switch your card** after the reveal you have to pay **20 points**. 
+- If you **switch your card** after the reveal, **20 points are deducted**.  
 - If you **stay** with your first choice, **no points are deducted**.  
 
-💡 Points are **cumulative across rounds**. At the end of the experiment, the **top three scorers** will receive prizes:  
+💡 Points are **cumulative across rounds**. At the end, top three scorers receive:  
 - 1st place: 50 CHF  
 - 2nd place: 30 CHF  
 - 3rd place: 20 CHF
@@ -134,10 +98,45 @@ Here's how the points system works:
 
     st.subheader("📧 Contact info (optional)")
     st.write("If you want to partake in the prize drawing, please provide your email or phone number:")
+
+    name_input = st.text_input("Enter your first and last name:", key="name_input", value=st.session_state.player_name or "")
     contact_input = st.text_input("Email or phone number:", key="contact_input", value=st.session_state.contact_info)
 
+    col1, col2 = st.columns(2)
+    if col1.button("✅ Confirm Name & Start Trial"):
+        if name_input.strip() != "":
+            st.session_state.player_name = name_input.strip()
+            st.session_state.contact_info = contact_input.strip()
+            st.session_state.trial_mode = True
+            reset_game()
+            st.rerun()
+        else:
+            st.warning("Please enter a valid name.")
+    if col2.button("✅ Skip Trial & Start Experiment"):
+        if name_input.strip() != "":
+            st.session_state.player_name = name_input.strip()
+            st.session_state.contact_info = contact_input.strip()
+            st.session_state.trial_mode = False
+            st.session_state.ready_page = True
+            st.rerun()
+        else:
+            st.warning("Please enter a valid name.")
+    st.stop()
+
+# --- Phase type and current block ---
+phase_type = 0 if st.session_state.trial_mode else 1
+current_block = st.session_state.blocks[st.session_state.current_block_index]
+
+# --- Ready page for timed/untimed block ---
+if st.session_state.ready_page:
+    st.title(f"🚀 Block {current_block['block_number']} Instructions")
+    st.write(f"You will complete {max_rounds_per_block} rounds in this block.")
+    if current_block["time_pressure"]:
+        st.warning(f"This block has **time pressure**! You have {time_per_block_seconds//60} minutes to complete 20 rounds.")
+    else:
+        st.info("This block has **no time pressure**. Take your time!")
+
     if st.button("✅ Start Block"):
-        st.session_state.contact_info = contact_input.strip()
         st.session_state.ready_page = False
         if st.session_state.current_block_index == 0:
             st.session_state.current_points = 50
@@ -145,14 +144,12 @@ Here's how the points system works:
             st.session_state.block_timer_start = datetime.now()
         reset_game()
         st.rerun()
-    st.stop()
 
-# --- Timer display for timed blocks ---
+# --- Timer display for timed block ---
 if not st.session_state.trial_mode and current_block["time_pressure"] and st.session_state.block_timer_start:
     elapsed = (datetime.now() - st.session_state.block_timer_start).total_seconds()
     remaining = max(0, time_per_block_seconds - elapsed)
     minutes, seconds = divmod(int(remaining), 60)
-    st.progress(remaining / time_per_block_seconds)
     st.info(f"⏱ Time remaining: {minutes:02d}:{seconds:02d}")
     if remaining <= 0:
         st.error("⏰ Time's up for this block!")
@@ -176,14 +173,6 @@ def get_card_emojis():
             emojis.append("🂠")
     return emojis
 
-# --- Experiment finished summary ---
-if st.session_state.experiment_finished:
-    st.title("🎉 Thank you for participating!")
-    st.subheader("📊 Experiment Summary")
-    st.write(f"Final points: {st.session_state.current_points}")
-    st.dataframe(st.session_state.log_df, use_container_width=True)
-    st.stop()
-
 # --- Display header ---
 header_text = ""
 if st.session_state.phase == "first_pick":
@@ -202,10 +191,7 @@ st.header(header_text)
 cols = st.columns(3)
 emojis = get_card_emojis()
 for i, col in enumerate(cols):
-    col.markdown(
-        f"<h1 style='font-size:10rem; text-align:center'>{emojis[i]}</h1>",
-        unsafe_allow_html=True
-    )
+    col.markdown(f"<h1 style='font-size:10rem; text-align:center'>{emojis[i]}</h1>", unsafe_allow_html=True)
     if not st.session_state.game_over and col.button("Pick", key=f"card_{i}", use_container_width=True):
         if st.session_state.phase == "first_pick":
             st.session_state.first_choice = i
@@ -217,7 +203,6 @@ for i, col in enumerate(cols):
             st.session_state.second_choice = i
             st.session_state.phase = "reveal_all"
             st.session_state.game_over = True
-
             if not st.session_state.trial_mode:
                 stayed = st.session_state.first_choice == st.session_state.second_choice
                 won = st.session_state.second_choice == st.session_state.trophy_pos
@@ -227,28 +212,11 @@ for i, col in enumerate(cols):
                     st.session_state.current_points += 100
             st.rerun()
 
-# --- Display results ---
+# --- Log round ---
 if st.session_state.game_over:
     won = st.session_state.second_choice == st.session_state.trophy_pos
     stayed = st.session_state.first_choice == st.session_state.second_choice
 
-    st.header("Result:")
-    if won:
-        if stayed:
-            st.success("🎉 You won the 🏆 trophy because you stayed!")
-        else:
-            st.success("🎉 You won the 🏆 trophy because you switched!")
-    else:
-        st.error("❌ You picked the wrong card 😢")
-        if st.session_state.first_choice == st.session_state.trophy_pos:
-            st.info("💡 You should have stayed to win.")
-        else:
-            st.info("💡 You should have switched to win.")
-
-    if not st.session_state.trial_mode:
-        st.info(f"💰 Current points: {st.session_state.current_points}")
-
-    # --- Log round ---
     if not st.session_state.logged_this_round:
         round_number = current_block["rounds_completed"] + 1
         points = st.session_state.current_points if not st.session_state.trial_mode else 0
@@ -264,37 +232,12 @@ if st.session_state.game_over:
         }])
         st.session_state.log_df = pd.concat([st.session_state.log_df, new_row], ignore_index=True)
         st.session_state.logged_this_round = True
+        st.session_state.blocks[st.session_state.current_block_index]["rounds_completed"] += 1
 
-    # --- Control buttons ---
-    col1, col2 = st.columns(2)
-    next_button_label = "Next Round" if not st.session_state.trial_mode else "🔄 Again"
-    with col1:
-        if st.button(next_button_label):
-            st.session_state.logged_this_round = False
-            if phase_type == 0:
-                reset_game()
-            else:
-                st.session_state.experiment_rounds += 1
-                st.session_state.blocks[st.session_state.current_block_index]["rounds_completed"] += 1
-                if st.session_state.blocks[st.session_state.current_block_index]["rounds_completed"] >= max_rounds_per_block:
-                    st.session_state.current_block_index += 1
-                    st.session_state.experiment_rounds = 0
-                    if st.session_state.current_block_index >= len(st.session_state.blocks):
-                        st.session_state.experiment_finished = True
-                    else:
-                        st.session_state.ready_page = True
-                else:
-                    reset_game()
-            st.rerun()
-    if st.session_state.trial_mode:
-        with col2:
-            if st.button("🚀 Ready for Real Experiment"):
-                st.session_state.ready_page = True
-                st.rerun()
-
-# --- Game log ---
+# --- Show log ---
 st.divider()
 st.subheader("📊 Game Log")
 st.dataframe(st.session_state.log_df, use_container_width=True)
+
 
 
