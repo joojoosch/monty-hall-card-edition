@@ -6,7 +6,7 @@ from github import Github
 
 st.set_page_config(page_title="Card Game Experiment", page_icon="🏆", layout="wide")
 
-max_experiment_rounds = 20
+max_experiment_rounds = 3
 
 # --- Initialize session state ---
 if "player_name" not in st.session_state:
