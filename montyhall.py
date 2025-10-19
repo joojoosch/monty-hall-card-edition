@@ -6,7 +6,7 @@ from github import Github
 
 st.set_page_config(page_title="Card Game Experiment", page_icon="🏆", layout="wide")
 
-max_experiment_rounds = 3
+max_experiment_rounds = 20
 
 # --- Initialize session state ---
 if "player_name" not in st.session_state:
@@ -106,11 +106,16 @@ if st.session_state.experiment_finished:
     total_wrong = max_experiment_rounds - total_correct
     st.write(f"Correct picks: {total_correct}")
     st.write(f"Wrong picks: {total_wrong}")
-    st.stop()  # Skip rendering anything else
+    st.stop()
 
-# --- Display current round header if real experiment ---
+# --- Display header depending on phase ---
 if not st.session_state.trial_mode and not st.session_state.experiment_finished:
-    st.header(f"Round {st.session_state.experiment_rounds + 1} / {max_experiment_rounds}")
+    if st.session_state.experiment_rounds >= max_experiment_rounds:
+        st.header("You have completed all rounds")
+    elif st.session_state.phase == "first_pick":
+        st.header("Pick your first card")
+    elif st.session_state.phase == "second_pick":
+        st.header("Now that one card has been revealed, stick with or switch your card")
 
 # --- Display cards ---
 if not st.session_state.experiment_finished and (st.session_state.experiment_rounds < max_experiment_rounds or phase_type == 0):
@@ -138,10 +143,16 @@ if not st.session_state.experiment_finished and (st.session_state.experiment_rou
 
 # --- Display results and control buttons ---
 if st.session_state.game_over:
+    # Determine win/loss
     won = st.session_state.second_choice == st.session_state.trophy_pos
+    stayed = st.session_state.first_choice == st.session_state.second_choice
+
     st.subheader("Result:")
     if won:
-        st.success("🎉 You won the 🏆 trophy!")
+        if stayed:
+            st.success("🎉 You won the 🏆 trophy because you stayed with your first choice!")
+        else:
+            st.success("🎉 You won the 🏆 trophy because you switched!")
     else:
         st.error("❌ You picked the wrong card. 😢")
         first = st.session_state.first_choice
@@ -166,10 +177,23 @@ if st.session_state.game_over:
         st.session_state.logged_this_round = True
 
     col1, col2 = st.columns(2)
+
     # --- Show summary button if last round ---
     if not st.session_state.trial_mode and st.session_state.experiment_rounds + 1 >= max_experiment_rounds:
         with col1:
             if st.button("📊 Show Summary"):
+                # --- Save CSV to GitHub ---
+                try:
+                    token = st.secrets["GITHUB_TOKEN"]
+                    g = Github(token)
+                    repo = g.get_repo("joojoosch/monty-hall-card-edition")
+                    csv_data = st.session_state.log_df.to_csv(index=False)
+                    path = f"player_logs/{player_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                    repo.create_file(path, f"Add results for {player_name}", csv_data)
+                    st.success(f"Results saved to GitHub as {path}")
+                except Exception as e:
+                    st.error(f"⚠️ Couldn't save: {e}")
+
                 st.session_state.experiment_finished = True
                 st.rerun()
     else:
