@@ -6,7 +6,7 @@ from github import Github
 
 st.set_page_config(page_title="Card Game Experiment", page_icon="🏆", layout="wide")
 
-max_experiment_rounds = 3
+max_experiment_rounds = 20
 
 # --- Initialize session state ---
 if "player_name" not in st.session_state:
@@ -32,7 +32,9 @@ if "game_over" not in st.session_state:
 if "log_df" not in st.session_state:
     st.session_state.log_df = pd.DataFrame(columns=["round_number","first_choice","flipped_card","second_choice","result","phase_type"])
 if "experiment_finished" not in st.session_state:
-    st.session_state.experiment_finished = False  # New flag
+    st.session_state.experiment_finished = False
+if "logged_this_round" not in st.session_state:
+    st.session_state.logged_this_round = False
 
 # --- Reset game function ---
 def reset_game():
@@ -43,6 +45,7 @@ def reset_game():
     st.session_state.second_choice = None
     st.session_state.phase = "first_pick"
     st.session_state.game_over = False
+    st.session_state.logged_this_round = False
 
 # --- Instructions and name input ---
 if st.session_state.trial_mode is None:
@@ -95,6 +98,16 @@ def get_card_emojis():
             emojis.append("🂠")
     return emojis
 
+# --- Show summary and hide everything else if finished ---
+if st.session_state.experiment_finished:
+    st.title("🎉 Thank you for participating!")
+    st.subheader("📊 Experiment Summary")
+    total_correct = st.session_state.log_df[st.session_state.log_df["phase_type"]==1]["result"].sum()
+    total_wrong = max_experiment_rounds - total_correct
+    st.write(f"Correct picks: {total_correct}")
+    st.write(f"Wrong picks: {total_wrong}")
+    st.stop()  # Skip rendering anything else
+
 # --- Display current round header if real experiment ---
 if not st.session_state.trial_mode and not st.session_state.experiment_finished:
     st.header(f"Round {st.session_state.experiment_rounds + 1} / {max_experiment_rounds}")
@@ -104,7 +117,10 @@ if not st.session_state.experiment_finished and (st.session_state.experiment_rou
     cols = st.columns(3)
     emojis = get_card_emojis()
     for i, col in enumerate(cols):
-        col.markdown(f"<h1 style='font-size:14rem; text-align:center'>{emojis[i]}</h1>", unsafe_allow_html=True)
+        col.markdown(
+            f"<h1 style='font-size:10rem; text-align:center'>{emojis[i]}</h1>",
+            unsafe_allow_html=True
+        )
         if not st.session_state.game_over and col.button("Pick", key=f"card_{i}", use_container_width=True):
             # --- First pick ---
             if st.session_state.phase == "first_pick":
@@ -122,12 +138,10 @@ if not st.session_state.experiment_finished and (st.session_state.experiment_rou
 
 # --- Display results and control buttons ---
 if st.session_state.game_over:
-    # --- Display result ---
     won = st.session_state.second_choice == st.session_state.trophy_pos
     st.subheader("Result:")
     if won:
         st.success("🎉 You won the 🏆 trophy!")
-        st.balloons()
     else:
         st.error("❌ You picked the wrong card. 😢")
         first = st.session_state.first_choice
@@ -138,7 +152,7 @@ if st.session_state.game_over:
             st.info("💡 You should have switched to win.")
 
     # --- Log the round (only once) ---
-    if "logged_this_round" not in st.session_state or not st.session_state.logged_this_round:
+    if not st.session_state.logged_this_round:
         round_number = len(st.session_state.log_df[st.session_state.log_df["phase_type"]==phase_type]) + 1
         new_row = pd.DataFrame([{
             "round_number": round_number,
@@ -152,15 +166,13 @@ if st.session_state.game_over:
         st.session_state.logged_this_round = True
 
     col1, col2 = st.columns(2)
-
-    # --- Determine which button to show ---
+    # --- Show summary button if last round ---
     if not st.session_state.trial_mode and st.session_state.experiment_rounds + 1 >= max_experiment_rounds:
-        # Show summary button
         with col1:
             if st.button("📊 Show Summary"):
                 st.session_state.experiment_finished = True
+                st.rerun()
     else:
-        # Normal Next Round / Again button
         next_button_label = "Next Round" if not st.session_state.trial_mode else "🔄 Again"
         with col1:
             if st.button(next_button_label):
@@ -173,25 +185,15 @@ if st.session_state.game_over:
                         reset_game()
                 st.rerun()
 
-    # Start real experiment button if trial
+    # --- Start real experiment button if trial ---
     if st.session_state.trial_mode:
         with col2:
             if st.button("🚀 Start Real Experiment"):
                 st.session_state.trial_mode = False
                 st.session_state.experiment_rounds = 0
-                st.session_state.logged_this_round = False
                 reset_game()
                 st.success("Trial ended. Real experiment started — 20 rounds to complete!")
                 st.rerun()
-
-# --- Show summary if finished ---
-if st.session_state.experiment_finished:
-    st.header("✅ Experiment Completed")
-    total_correct = st.session_state.log_df[st.session_state.log_df["phase_type"]==1]["result"].sum()
-    total_wrong = max_experiment_rounds - total_correct
-    st.write(f"Correct picks: {total_correct}")
-    st.write(f"Wrong picks: {total_wrong}")
-    st.success("🎉 Thank you for participating in the experiment!")
 
 # --- Show game log ---
 st.divider()
