@@ -143,14 +143,14 @@ if st.session_state.game_over:
             "phase_type": phase_type
         }])
         st.session_state.log_df = pd.concat([st.session_state.log_df, new_row], ignore_index=True)
-        st.session_state.logged_this_round = True  # flag to prevent double logging
+        st.session_state.logged_this_round = True
 
-    # --- Buttons: Next Round & Go to Real Experiment ---
+    # --- Buttons: Again & Start Real Experiment (if trial) ---
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("➡️ Next Round"):
+        if st.button("🔄 Again"):
             st.session_state.logged_this_round = False
-            if phase_type == 0:  # trial mode
+            if phase_type == 0:
                 reset_game()
             else:
                 st.session_state.experiment_rounds += 1
@@ -175,14 +175,16 @@ if st.session_state.game_over:
                     except Exception as e:
                         st.error(f"⚠️ Couldn't save: {e}")
             st.rerun()
-    with col2:
-        if st.button("🚀 Go to Real Experiment"):
-            st.session_state.trial_mode = False
-            st.session_state.experiment_rounds = 0
-            st.session_state.logged_this_round = False
-            reset_game()
-            st.success("Trial ended. Real experiment started — 20 rounds to complete!")
-            st.rerun()
+    # Show Start Real Experiment button only if currently in trial
+    if st.session_state.trial_mode:
+        with col2:
+            if st.button("🚀 Start Real Experiment"):
+                st.session_state.trial_mode = False
+                st.session_state.experiment_rounds = 0
+                st.session_state.logged_this_round = False
+                reset_game()
+                st.success("Trial ended. Real experiment started — 20 rounds to complete!")
+                st.rerun()
 
 # --- Show game log ---
 st.divider()
