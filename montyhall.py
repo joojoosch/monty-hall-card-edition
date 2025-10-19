@@ -6,7 +6,7 @@ from github import Github
 
 st.set_page_config(page_title="Card Game Experiment", page_icon="🏆", layout="wide")
 
-max_experiment_rounds = 3
+max_experiment_rounds = 20
 
 # --- Initialize session state ---
 if "player_name" not in st.session_state:
@@ -36,7 +36,7 @@ if "experiment_finished" not in st.session_state:
 if "logged_this_round" not in st.session_state:
     st.session_state.logged_this_round = False
 if "ready_page" not in st.session_state:
-    st.session_state.ready_page = False  # New flag for the ready page
+    st.session_state.ready_page = False  # For ready page
 
 # --- Reset game function ---
 def reset_game():
@@ -82,7 +82,7 @@ if st.session_state.trial_mode is None and not st.session_state.ready_page:
         st.session_state.trial_mode = True
         st.rerun()
     if col2.button("No, start experiment"):
-        st.session_state.ready_page = True  # Show ready page first
+        st.session_state.ready_page = True
         st.rerun()
     st.stop()
 
@@ -120,7 +120,7 @@ def get_card_emojis():
             emojis.append("🂠")
     return emojis
 
-# --- Show summary and hide everything else if finished ---
+# --- Show summary if finished ---
 if st.session_state.experiment_finished:
     st.title("🎉 Thank you for participating!")
     st.subheader("📊 Experiment Summary")
@@ -139,10 +139,11 @@ elif st.session_state.phase == "second_pick":
 elif st.session_state.phase == "reveal_all" and not st.session_state.trial_mode:
     header_text = f"Round {st.session_state.experiment_rounds + 1}: Reveal"
 
+# Add round number for real experiment
 if not st.session_state.trial_mode and st.session_state.phase != "reveal_all":
     header_text = f"Round {st.session_state.experiment_rounds + 1}: {header_text}"
 
-if header_text and not st.session_state.experiment_finished:
+if header_text:
     st.header(header_text)
 
 # --- Display cards ---
@@ -150,8 +151,12 @@ if not st.session_state.experiment_finished and (st.session_state.experiment_rou
     cols = st.columns(3)
     emojis = get_card_emojis()
     for i, col in enumerate(cols):
+        # Add red border if this is the revealed losing card
+        border_style = ""
+        if st.session_state.phase == "second_pick" and i == st.session_state.flipped_card:
+            border_style = "border: 5px solid red; border-radius:10px;"
         col.markdown(
-            f"<h1 style='font-size:10rem; text-align:center'>{emojis[i]}</h1>",
+            f"<h1 style='font-size:8rem; text-align:center; {border_style}'>{emojis[i]}</h1>",
             unsafe_allow_html=True
         )
         if not st.session_state.game_over and col.button("Pick", key=f"card_{i}", use_container_width=True):
@@ -187,6 +192,7 @@ if st.session_state.game_over:
         else:
             st.info("💡 You should have switched to win.")
 
+    # Log round only once
     if not st.session_state.logged_this_round:
         round_number = len(st.session_state.log_df[st.session_state.log_df["phase_type"]==phase_type]) + 1
         new_row = pd.DataFrame([{
@@ -214,7 +220,6 @@ if st.session_state.game_over:
                     st.success(f"Results saved to GitHub as {path}")
                 except Exception as e:
                     st.error(f"⚠️ Couldn't save: {e}")
-
                 st.session_state.experiment_finished = True
                 st.rerun()
     else:
@@ -239,5 +244,4 @@ if st.session_state.game_over:
 st.divider()
 st.subheader("📊 Game Log")
 st.dataframe(st.session_state.log_df, use_container_width=True)
-
 
