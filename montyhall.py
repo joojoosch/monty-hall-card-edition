@@ -102,11 +102,15 @@ The winning trophy card is then revealed!
 # ---------------- PAGE: Trial Runs ----------------
 if st.session_state.page == "trial":
     st.title("🔁 Trial Runs (Practice)")
+    if st.session_state.phase=="first_pick":
+        st.subheader("Pick your first card")
+    elif st.session_state.phase=="second_pick":
+        st.subheader("Pick Again (same or switch)")
     st.write(f"Trial runs completed: **{st.session_state.trial_runs_done}/{trial_runs_required}**")
-    if st.session_state.trial_runs_done >= trial_runs_required:
-        if st.button("📄 View Trial Summary"):
-            st.session_state.page = "trial_summary"
-            st.rerun()
+    # Next button at top
+    if st.session_state.game_over and st.button("Next"):
+        reset_game()
+        st.rerun()
 
 # ---------------- TRIAL / EXPERIMENT CARD LOGIC ----------------
 if st.session_state.page in ["trial","round1","round2"]:
@@ -152,14 +156,13 @@ if st.session_state.game_over:
     if st.session_state.page == "trial":
         # Trial advice
         if won:
-            st.success("🎉 You found the trophy!")
+            st.success("🎉 You found the correct card!")
         else:
             st.error("❌ You picked the wrong card.")
-        # Advice
-        if first == trophy and second != trophy:
-            st.info("💡 You should have stayed to win.")
-        elif first != trophy and second == trophy:
-            st.info("💡 You should have switched to win.")
+            if first == trophy and second != trophy:
+                st.info("💡 You should have stayed to win.")
+            elif first != trophy and second == trophy:
+                st.info("💡 You should have switched to win.")
         # Log trial
         if not st.session_state.logged_this_round:
             trial_number = st.session_state.trial_runs_done + 1
@@ -182,7 +185,6 @@ if st.session_state.game_over:
         lost_points = 0
         if won:
             round_points_change += 100
-        # Cost already subtracted
         lost_points = 10 if st.session_state.current_round_set==1 and not stayed else 10 if st.session_state.current_round_set==2 and stayed else 0
         st.session_state.points += 100 if won else 0
         st.markdown(f"**You won +{100 if won else 0} points and lost −{lost_points} points this round.**")
@@ -205,18 +207,6 @@ if st.session_state.game_over:
             st.session_state.experiment_round +=1
             st.session_state.logged_this_round = True
 
-    # Next button to continue
-    if st.button("Next"):
-        reset_game()
-        # Transition to next pages if experiment rounds done
-        if st.session_state.page=="trial" and st.session_state.trial_runs_done >= trial_runs_required:
-            st.session_state.page="trial_summary"
-        elif st.session_state.page=="round1" and st.session_state.experiment_round==3:
-            st.session_state.page="round2_instr"
-        elif st.session_state.page=="round2" and st.session_state.experiment_round==6:
-            st.session_state.page="summary"
-        st.rerun()
-
 # ---------------- PAGE: Trial Summary ----------------
 if st.session_state.page=="trial_summary":
     st.title("📄 Trial Summary")
@@ -225,9 +215,18 @@ if st.session_state.page=="trial_summary":
     total_stay_wins = st.session_state.trial_log['stay_win'].sum()
     st.write(f"Wins by switching: {total_switch_wins}")
     st.write(f"Wins by staying: {total_stay_wins}")
-    if st.button("🚀 Continue to Real Experiment"):
-        st.session_state.page="round1_instr"
-        st.rerun()
+    col1,col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Another 10 Trial Rounds"):
+            st.session_state.trial_runs_done = 0
+            st.session_state.trial_log = pd.DataFrame(columns=st.session_state.trial_log.columns)
+            st.session_state.page="trial"
+            reset_game()
+            st.rerun()
+    with col2:
+        if st.button("🚀 Go to Real Experiment"):
+            st.session_state.page="round1_instr"
+            st.rerun()
 
 # ---------------- PAGE: Round 1 Instructions ----------------
 if st.session_state.page=="round1_instr":
@@ -273,11 +272,17 @@ if st.session_state.page=="summary":
     total_stay_wins = st.session_state.experiment_log['stay_win'].sum()
     st.write(f"Wins by switching: {total_switch_wins}")
     st.write(f"Wins by staying: {total_stay_wins}")
-    st.download_button(
-        "💾 Download Experiment Data as CSV",
-        st.session_state.experiment_log.to_csv(index=False),
-        file_name=f"{st.session_state.player_name}_experiment_log.csv"
-    )
 
+    # --- Upload to GitHub ---
+    try:
+        token = st.secrets["GITHUB_TOKEN"]
+        g = Github(token)
+        repo = g.get_repo("joojoosch/monty-hall-card-edition")
+        csv_data = st.session_state.experiment_log.to_csv(index=False)
+        path = f"player_logs/{st.session_state.player_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        repo.create_file(path, f"Add results for {st.session_state.player_name}", csv_data)
+        st.success(f"Results saved to GitHub as {path}")
+    except Exception as e:
+        st.error(f"⚠️ Couldn't save to GitHub: {e}")
 
 
