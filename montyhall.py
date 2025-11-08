@@ -6,14 +6,14 @@ from github import Github
 
 st.set_page_config(page_title="Card Game Experiment", page_icon="🏆", layout="wide")
 
-max_experiment_rounds = 6  # 2 rounds × 3 trials each
 trial_runs_required = 10
+max_experiment_rounds = 6  # 2 rounds × 3 trials each
 
 # --- Initialize session state ---
 if "player_name" not in st.session_state:
     st.session_state.player_name = None
 if "page" not in st.session_state:
-    st.session_state.page = "instructions"  # instructions, trial, trial_summary, round1_instr, round1, round2_instr, round2, summary
+    st.session_state.page = "instructions"
 if "trial_runs_done" not in st.session_state:
     st.session_state.trial_runs_done = 0
 if "trial_log" not in st.session_state:
@@ -21,7 +21,7 @@ if "trial_log" not in st.session_state:
 if "experiment_round" not in st.session_state:
     st.session_state.experiment_round = 0
 if "current_round_set" not in st.session_state:
-    st.session_state.current_round_set = 1  # 1 or 2
+    st.session_state.current_round_set = 1
 if "experiment_log" not in st.session_state:
     st.session_state.experiment_log = pd.DataFrame(columns=["round_number","first_choice","flipped_card","second_choice","trophy_card","result","phase_type","points_after_round","switch_win","stay_win"])
 if "cards" not in st.session_state:
@@ -39,7 +39,7 @@ if "phase" not in st.session_state:
 if "game_over" not in st.session_state:
     st.session_state.game_over = False
 if "points" not in st.session_state:
-    st.session_state.points = 0
+    st.session_state.points = 50  # start points
 if "logged_this_round" not in st.session_state:
     st.session_state.logged_this_round = False
 
@@ -107,7 +107,6 @@ if st.session_state.page == "trial":
     elif st.session_state.phase=="second_pick":
         st.subheader("Pick Again (same or switch)")
     st.write(f"Trial runs completed: **{st.session_state.trial_runs_done}/{trial_runs_required}**")
-    # Next button at top
     if st.session_state.game_over and st.button("Next"):
         reset_game()
         st.rerun()
@@ -126,11 +125,9 @@ if st.session_state.page in ["trial","round1","round2"]:
                 st.session_state.phase = "second_pick"
                 st.rerun()
             elif st.session_state.phase == "second_pick" and i != st.session_state.flipped_card:
-                # Determine if staying or switching
                 staying = i == st.session_state.first_choice
                 cost = 0
                 if st.session_state.page != "trial":
-                    # Real experiment points
                     if st.session_state.current_round_set == 1 and not staying:
                         cost = 10
                     elif st.session_state.current_round_set == 2 and staying:
@@ -154,7 +151,6 @@ if st.session_state.game_over:
     switch_win, stay_win = compute_switch_stay(first, second, trophy)
 
     if st.session_state.page == "trial":
-        # Trial advice
         if won:
             st.success("🎉 You found the correct card!")
         else:
@@ -163,7 +159,6 @@ if st.session_state.game_over:
                 st.info("💡 You should have stayed to win.")
             elif first != trophy and second != trophy:
                 st.info("💡 You should have switched to win.")
-        # Log trial
         if not st.session_state.logged_this_round:
             trial_number = st.session_state.trial_runs_done + 1
             new_row = pd.DataFrame([{
@@ -179,37 +174,11 @@ if st.session_state.game_over:
             st.session_state.trial_log = pd.concat([st.session_state.trial_log,new_row],ignore_index=True)
             st.session_state.trial_runs_done +=1
             st.session_state.logged_this_round = True
-            # Check if trial limit reached
             if st.session_state.trial_runs_done >= trial_runs_required:
-                st.session_state.page = "trial_summary"
-                st.rerun()
-    else:
-        # Real experiment
-        round_points_change = 0
-        lost_points = 0
-        if won:
-            round_points_change += 100
-        lost_points = 10 if st.session_state.current_round_set==1 and not stayed else 10 if st.session_state.current_round_set==2 and stayed else 0
-        st.session_state.points += 100 if won else 0
-        st.markdown(f"**You won +{100 if won else 0} points and lost −{lost_points} points this round.**")
-        # Log experiment
-        if not st.session_state.logged_this_round:
-            round_number = st.session_state.experiment_round + 1
-            new_row = pd.DataFrame([{
-                "round_number": round_number,
-                "first_choice": first,
-                "flipped_card": st.session_state.flipped_card,
-                "second_choice": second,
-                "trophy_card": trophy,
-                "result": won,
-                "phase_type": st.session_state.current_round_set,
-                "points_after_round": st.session_state.points,
-                "switch_win": switch_win,
-                "stay_win": stay_win
-            }])
-            st.session_state.experiment_log = pd.concat([st.session_state.experiment_log,new_row],ignore_index=True)
-            st.session_state.experiment_round +=1
-            st.session_state.logged_this_round = True
+                st.info("✅ You completed 10 trial runs.")
+                if st.button("📄 See Results"):
+                    st.session_state.page = "trial_summary"
+                    st.rerun()
 
 # ---------------- PAGE: Trial Summary ----------------
 if st.session_state.page=="trial_summary":
@@ -231,5 +200,6 @@ if st.session_state.page=="trial_summary":
         if st.button("🚀 Go to Real Experiment"):
             st.session_state.page="round1_instr"
             st.rerun()
+
 
 
