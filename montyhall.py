@@ -161,7 +161,7 @@ if st.session_state.game_over:
             st.error("❌ You picked the wrong card.")
             if first == trophy and second != trophy:
                 st.info("💡 You should have stayed to win.")
-            elif first != trophy and second == trophy:
+            elif first != trophy and second != trophy:
                 st.info("💡 You should have switched to win.")
         # Log trial
         if not st.session_state.logged_this_round:
@@ -179,6 +179,10 @@ if st.session_state.game_over:
             st.session_state.trial_log = pd.concat([st.session_state.trial_log,new_row],ignore_index=True)
             st.session_state.trial_runs_done +=1
             st.session_state.logged_this_round = True
+            # Check if trial limit reached
+            if st.session_state.trial_runs_done >= trial_runs_required:
+                st.session_state.page = "trial_summary"
+                st.rerun()
     else:
         # Real experiment
         round_points_change = 0
@@ -227,62 +231,5 @@ if st.session_state.page=="trial_summary":
         if st.button("🚀 Go to Real Experiment"):
             st.session_state.page="round1_instr"
             st.rerun()
-
-# ---------------- PAGE: Round 1 Instructions ----------------
-if st.session_state.page=="round1_instr":
-    st.title("🎯 Round 1 Instructions")
-    st.write("""
-You start the **real experiment** with **50 points**.  
-
-**Round 1 rules:**  
-- Correct card: +100 points  
-- Switching after reveal: −10 points  
-- Staying: free
-""")
-    if st.button("✅ I understand, start Round 1"):
-        st.session_state.points=50
-        st.session_state.current_round_set=1
-        st.session_state.experiment_round=0
-        st.session_state.page="round1"
-        reset_game()
-        st.rerun()
-
-# ---------------- PAGE: Round 2 Instructions ----------------
-if st.session_state.page=="round2_instr":
-    st.title("🎯 Round 2 Instructions")
-    st.write("""
-**Round 2 rules:**  
-- Correct card: +100 points  
-- Staying with first choice: −10 points  
-- Switching: free
-""")
-    if st.button("✅ I understand, start Round 2"):
-        st.session_state.current_round_set=2
-        st.session_state.page="round2"
-        reset_game()
-        st.rerun()
-
-# ---------------- PAGE: Final Summary ----------------
-if st.session_state.page=="summary":
-    st.title("🎉 Experiment Complete!")
-    st.write(f"💰 Final points: {st.session_state.points}")
-    total_correct = st.session_state.experiment_log['result'].sum()
-    st.write(f"✅ Total correct picks: {total_correct}")
-    total_switch_wins = st.session_state.experiment_log['switch_win'].sum()
-    total_stay_wins = st.session_state.experiment_log['stay_win'].sum()
-    st.write(f"Wins by switching: {total_switch_wins}")
-    st.write(f"Wins by staying: {total_stay_wins}")
-
-    # --- Upload to GitHub ---
-    try:
-        token = st.secrets["GITHUB_TOKEN"]
-        g = Github(token)
-        repo = g.get_repo("joojoosch/monty-hall-card-edition")
-        csv_data = st.session_state.experiment_log.to_csv(index=False)
-        path = f"player_logs/{st.session_state.player_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        repo.create_file(path, f"Add results for {st.session_state.player_name}", csv_data)
-        st.success(f"Results saved to GitHub as {path}")
-    except Exception as e:
-        st.error(f"⚠️ Couldn't save to GitHub: {e}")
 
 
