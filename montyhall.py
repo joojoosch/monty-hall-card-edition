@@ -13,20 +13,23 @@ TRIALS_PER_ROUND = 3  # 3 trials per round, 2 rounds => 6 experiment trials tota
 # ---------------- Session state initialization ----------------
 if "player_name" not in st.session_state:
     st.session_state.player_name = None
+if "email" not in st.session_state:
+    st.session_state.email = ""  # optional
 
-# page can be: instructions, trial, trial_summary, round1_instr, round1, round2_instr, round2, summary
+# page values: instructions, trial, trial_summary, round1_instr, round1, round2_instr, round2, summary
 if "page" not in st.session_state:
     st.session_state.page = "instructions"
 
+# Trials
 if "trial_runs_done" not in st.session_state:
     st.session_state.trial_runs_done = 0
 if "trial_log" not in st.session_state:
     st.session_state.trial_log = pd.DataFrame(columns=[
         "trial_number", "first_choice", "flipped_card", "second_choice",
-        "trophy_card", "result", "switch_win", "stay_win"
+        "trophy_card", "result", "switch_win", "stay_win", "email"
     ])
 
-# experiment counters
+# Experiment
 if "experiment_round" not in st.session_state:
     st.session_state.experiment_round = 0  # number of completed experiment trials (0..6)
 if "current_round_set" not in st.session_state:
@@ -35,7 +38,7 @@ if "experiment_log" not in st.session_state:
     st.session_state.experiment_log = pd.DataFrame(columns=[
         "round_number", "first_choice", "flipped_card", "second_choice",
         "trophy_card", "result", "phase_type", "points_after_round",
-        "switch_win", "stay_win"
+        "switch_win", "stay_win", "email"
     ])
 
 # Game state
@@ -54,7 +57,7 @@ if "phase" not in st.session_state:
 if "game_over" not in st.session_state:
     st.session_state.game_over = False
 if "points" not in st.session_state:
-    st.session_state.points = 50  # start points when real experiment starts (kept across rounds)
+    st.session_state.points = 50  # start points when real experiment begins
 if "logged_this_round" not in st.session_state:
     st.session_state.logged_this_round = False
 
@@ -88,8 +91,18 @@ def compute_switch_stay(first, second, trophy):
             return 1, 0
     return 0, 0
 
-# ---------------- Page 1: Instructions + Name ----------------
+# Utility: current trial index within current experiment round set (1..3)
+def current_trial_index_in_set():
+    # experiment_round counts completed trials (0..6). For display, we want 1..3 within current round set.
+    completed = st.session_state.experiment_round
+    idx = (completed % TRIALS_PER_ROUND) + 1
+    return idx
+
+# ---------------- Page 1: Instructions + Name + optional email ----------------
 if st.session_state.page == "instructions":
+    # clear any leftover game_over state
+    reset_game_state_for_trial()
+
     st.title("🏆 Card Game Experiment")
     st.write("""
 You will be shown three cards and your goal is to find the trophy 🏆 behind one of them.
@@ -99,19 +112,17 @@ You will be shown three cards and your goal is to find the trophy 🏆 behind on
 3️⃣ Choose to stick with your first choice or switch to the other remaining card.  
 The winning trophy card is then revealed!
 """)
-    if st.session_state.player_name is None:
-        name_input = st.text_input("Enter your first and last name:")
-        if st.button("✅ Confirm Name"):
-            if name_input.strip() != "":
-                st.session_state.player_name = name_input.strip()
-                st.session_state.page = "trial"
-                reset_game_state_for_trial()
-                st.rerun()
-            else:
-                st.warning("Please enter a valid name.")
-    else:
-        # If name already present, allow continuing (edge-case if reloaded)
-        if st.button("➡️ Continue to Trials"):
+
+    name_input = st.text_input("Enter your first and last name:", value=st.session_state.player_name or "")
+    email_input = st.text_input("(Optional) Enter your email to be eligible for a prize if you're a top scorer:", value=st.session_state.email or "")
+
+    if st.button("✅ Confirm Name and Continue"):
+        if name_input.strip() == "":
+            st.warning("Please enter a valid name.")
+        else:
+            st.session_state.player_name = name_input.strip()
+            st.session_state.email = email_input.strip()
+            # move to trials
             st.session_state.page = "trial"
             reset_game_state_for_trial()
             st.rerun()
@@ -120,13 +131,11 @@ The winning trophy card is then revealed!
 # ---------------- Page 2: Trial Runs (Practice) ----------------
 if st.session_state.page == "trial":
     st.title("🔁 Trial Runs (Practice)")
-
-    # Top area: progress + Next / See Results button (appears only after reveal)
+    # Top area: progress + Next / See Results (top, visible after reveal)
     st.write(f"Trial runs completed: **{st.session_state.trial_runs_done}/{TRIALS_REQUIRED}**")
 
-    # show top Next / See Results only if current trial finished (game_over True)
+    # If the last trial finished (game_over), show top Next or See Results
     if st.session_state.game_over:
-        # use columns so button sits at top-left visually
         col_top, _ = st.columns([1, 4])
         with col_top:
             if st.session_state.trial_runs_done < TRIALS_REQUIRED:
@@ -134,51 +143,56 @@ if st.session_state.page == "trial":
                     reset_game_state_for_trial()
                     st.rerun()
             else:
-                # after TRIALS_REQUIRED trials, replace Next with See Results
+                # After exactly TRIALS_REQUIRED completed, show See Results (only after 10th finished)
                 if st.button("📄 See Results", key="trial_see_results_top"):
                     st.session_state.page = "trial_summary"
                     st.rerun()
 
-    # phase header
+    # Phase header below top button
     if st.session_state.phase == "first_pick":
         st.subheader("Pick your first card")
     elif st.session_state.phase == "second_pick":
         st.subheader("Pick Again (same or switch)")
 
-# ---------------- Card display & selection logic (trial and experiment) ----------------
+# ---------------- Card display & logic (Trials & Experiment) ----------------
 if st.session_state.page in ["trial", "round1", "round2"]:
+    # For real experiment pages, show header + points above cards (Round pages only)
+    if st.session_state.page == "round1":
+        # show trial index 1..3 and score above cards
+        idx = current_trial_index_in_set()
+        st.title(f"Round 1 — Trial {idx}/{TRIALS_PER_ROUND}")
+        st.markdown(f"### 💰 Current Score: {st.session_state.points} points")
+    elif st.session_state.page == "round2":
+        idx = current_trial_index_in_set()
+        st.title(f"Round 2 — Trial {idx}/{TRIALS_PER_ROUND}")
+        st.markdown(f"### 💰 Current Score: {st.session_state.points} points")
+
     cols = st.columns(3)
     emojis = card_emojis()
     for i, col in enumerate(cols):
         col.markdown(f"<h1 style='font-size:10rem; text-align:center'>{emojis[i]}</h1>", unsafe_allow_html=True)
-        # Only show pick buttons when not in reveal state
+        # only allow picking when not game_over and not clicking revealed card
         if not st.session_state.game_over and col.button("Pick", key=f"card_{i}", use_container_width=True):
-            # First pick
             if st.session_state.phase == "first_pick":
                 st.session_state.first_choice = i
-                # pick a losing card that's not first_choice and not trophy
                 losing_cards = [j for j in range(3) if j != i and j != st.session_state.trophy_pos]
                 st.session_state.flipped_card = random.choice(losing_cards)
                 st.session_state.phase = "second_pick"
                 st.rerun()
 
-            # Second pick (player decides to stay or switch)
             elif st.session_state.phase == "second_pick" and i != st.session_state.flipped_card:
                 staying = (i == st.session_state.first_choice)
                 cost = 0
-                # Only apply costs in real experiment pages (round1 / round2)
+                # apply cost only in real experiment pages
                 if st.session_state.page != "trial":
-                    # Round1: switching costs 10
                     if st.session_state.current_round_set == 1 and not staying:
                         cost = 10
-                    # Round2: staying costs 10
                     elif st.session_state.current_round_set == 2 and staying:
                         cost = 10
-                    # Check funds
                     if st.session_state.points < cost:
                         st.warning("⚠️ You don’t have enough points for this action!")
                         st.stop()
-                    # Deduct cost immediately
+                    # deduct cost immediately
                     st.session_state.points -= cost
 
                 st.session_state.second_choice = i
@@ -186,7 +200,7 @@ if st.session_state.page in ["trial", "round1", "round2"]:
                 st.session_state.game_over = True
                 st.rerun()
 
-# ---------------- Display results after a trial/trial-experiment selection ----------------
+# ---------------- Display results area (below cards) ----------------
 if st.session_state.game_over:
     first = st.session_state.first_choice
     second = st.session_state.second_choice
@@ -195,19 +209,17 @@ if st.session_state.game_over:
     stayed = (first == second)
     switch_win, stay_win = compute_switch_stay(first, second, trophy)
 
-    # --- TRIAL behavior (advice only on loss) ---
+    # TRIAL behavior (advice only on loss)
     if st.session_state.page == "trial":
         if won:
             st.success("🎉 You found the correct card!")
         else:
             st.error("❌ You picked the wrong card.")
-            # advice for both loss-by-stay and loss-by-switch
             if first == trophy and second != trophy:
                 st.info("💡 You should have stayed to win.")
             elif first != trophy and second != trophy:
                 st.info("💡 You should have switched to win.")
 
-        # log the trial once
         if not st.session_state.logged_this_round:
             trial_number = st.session_state.trial_runs_done + 1
             new_row = pd.DataFrame([{
@@ -218,25 +230,23 @@ if st.session_state.game_over:
                 "trophy_card": trophy,
                 "result": won,
                 "switch_win": switch_win,
-                "stay_win": stay_win
+                "stay_win": stay_win,
+                "email": st.session_state.email
             }])
             st.session_state.trial_log = pd.concat([st.session_state.trial_log, new_row], ignore_index=True)
             st.session_state.trial_runs_done += 1
             st.session_state.logged_this_round = True
 
-    # --- REAL EXPERIMENT behavior (Round1 / Round2) ---
+    # REAL experiment behavior
     else:
-        # compute lost by cost (we deducted cost already), compute win bonus
+        # We already deducted cost at selection time. Now award bonus if won (once).
         bonus = 100 if won else 0
-        # compute lost_points for display: depends on round rule
+        # compute lost_points for message display
         if st.session_state.current_round_set == 1:
-            # switch cost in round1
             lost_points = 10 if (not stayed) else 0
         else:
-            # round2: stay cost
             lost_points = 10 if stayed else 0
 
-        # award bonus immediately (only once)
         if not st.session_state.logged_this_round:
             st.session_state.points += bonus
 
@@ -244,7 +254,7 @@ if st.session_state.game_over:
 
         # log experiment trial once
         if not st.session_state.logged_this_round:
-            round_number = st.session_state.experiment_round + 1  # 1-based indexing for log clarity
+            round_number = st.session_state.experiment_round + 1
             new_row = pd.DataFrame([{
                 "round_number": round_number,
                 "first_choice": first,
@@ -255,46 +265,34 @@ if st.session_state.game_over:
                 "phase_type": st.session_state.current_round_set,
                 "points_after_round": st.session_state.points,
                 "switch_win": switch_win,
-                "stay_win": stay_win
+                "stay_win": stay_win,
+                "email": st.session_state.email
             }])
             st.session_state.experiment_log = pd.concat([st.session_state.experiment_log, new_row], ignore_index=True)
             st.session_state.experiment_round += 1
             st.session_state.logged_this_round = True
 
-    # ---------- TOP Next / See Results button (so it's always at top, visible after reveal) ----------
-    if st.session_state.page == "trial":
-        # Trial top buttons already handled in trial page rendering above, but keep guard here
-        pass
-    else:
-        # For real experiment pages, show Next at top after reveal
+    # TOP Next button for experiment pages (placed at top logically but here we ensure appropriate navigation)
+    # For trial page the top button is already handled in that page's block.
+    if st.session_state.page in ["round1", "round2"]:
+        # Show Next at top so user can easily continue (we re-render page, but here we handle navigation)
         col_top, _ = st.columns([1, 4])
         with col_top:
-            # If still within current round (less than 3 trials completed in this round set)
-            # Determine overall completed in current round set:
-            # If current_round_set==1, experiments 0..2 are round1; if >=3 then round1 done.
-            if st.session_state.current_round_set == 1:
-                completed_in_round_set = st.session_state.experiment_round  # counts from 0 upward but corresponds overall
-                # after 3 completed (i.e., experiment_round >=3) we will move to round2 instructions
-                show_next_label = "Next"
-                if st.button("Next", key="exp_next_top"):
-                    # if finished round1 (3 trials), navigate to round2 instructions
-                    if st.session_state.experiment_round >= TRIALS_PER_ROUND:
-                        st.session_state.page = "round2_instr"
-                        reset_game_state_for_trial()
-                        st.rerun()
-                    else:
-                        reset_game_state_for_trial()
-                        st.rerun()
-            else:
-                # current_round_set == 2
-                if st.button("Next", key="exp_next_top2"):
-                    # if finished all experiment trials (6 completed), go to final summary
-                    if st.session_state.experiment_round >= (TRIALS_PER_ROUND * 2):
-                        st.session_state.page = "summary"
-                        st.rerun()
-                    else:
-                        reset_game_state_for_trial()
-                        st.rerun()
+            if st.button("Next", key=f"exp_next_top_{st.session_state.page}"):
+                # If finished Round 1 (3 trials) and currently in round1 -> go to round2 instructions
+                if st.session_state.current_round_set == 1 and st.session_state.experiment_round >= TRIALS_PER_ROUND:
+                    st.session_state.page = "round2_instr"
+                    reset_game_state_for_trial()
+                    st.rerun()
+                # If in round2 and finished all experiment trials -> summary
+                elif st.session_state.current_round_set == 2 and st.session_state.experiment_round >= (TRIALS_PER_ROUND * 2):
+                    st.session_state.page = "summary"
+                    st.rerun()
+                else:
+                    # continue next trial in same round set
+                    # if we've just completed a trial and need to switch round set number when moving to round2, that is handled above
+                    reset_game_state_for_trial()
+                    st.rerun()
 
 # ---------------- Page: Trial Summary ----------------
 if st.session_state.page == "trial_summary":
@@ -325,6 +323,8 @@ if st.session_state.page == "trial_summary":
 
 # ---------------- Page: Round 1 Instructions ----------------
 if st.session_state.page == "round1_instr":
+    # ensure no lingering "You won..." / game over display
+    reset_game_state_for_trial()
     st.title("🎯 Round 1 Instructions")
     st.write("""
 Now we add the point system for the real experiment.
@@ -335,8 +335,6 @@ Now we add the point system for the real experiment.
 - Staying is free in Round 1.
 """)
     if st.button("✅ I understand, start Round 1"):
-        # ensure points are at least 50 (if they came from trial set, keep points as is or set to 50)
-        # requirement: start real experiment with 50 points -> reset to 50
         st.session_state.points = 50
         st.session_state.current_round_set = 1
         st.session_state.experiment_round = 0
@@ -344,18 +342,15 @@ Now we add the point system for the real experiment.
         reset_game_state_for_trial()
         st.rerun()
 
-# ---------------- Page: Round 1 (3 Trials) ----------------
+# ---------------- Page: Round 1 gameplay ----------------
 if st.session_state.page == "round1":
-    # top: show current points and header depending on phase
-    st.title(f"Round {st.session_state.experiment_round+1}/{TRIALS_PER_ROUND * 2}:")
-    st.markdown(f"### 💰 Current Score: {st.session_state.points} points")
-    if st.session_state.phase == "first_pick":
-        st.subheader("Pick your first card")
-    elif st.session_state.phase == "second_pick":
-        st.subheader("Pick Again (same or switch)")
+    # top header & score handled in card rendering block above
+    pass
 
 # ---------------- Page: Round 2 Instructions ----------------
 if st.session_state.page == "round2_instr":
+    # clear any lingering game_over
+    reset_game_state_for_trial()
     st.title("🎯 Round 2 Instructions")
     st.write("""
 Round 2 rules:
@@ -366,22 +361,19 @@ Round 2 rules:
 """)
     if st.button("✅ I understand, start Round 2"):
         st.session_state.current_round_set = 2
-        # do not reset points (carry over)
+        # keep points as-is (carry over)
         st.session_state.page = "round2"
         reset_game_state_for_trial()
         st.rerun()
 
-# ---------------- Page: Round 2 (3 Trials) ----------------
+# ---------------- Page: Round 2 gameplay ----------------
 if st.session_state.page == "round2":
-    st.title(f"Round {st.session_state.experiment_round+1}/{TRIALS_PER_ROUND * 2}:")
-    st.markdown(f"### 💰 Current Score: {st.session_state.points} points")
-    if st.session_state.phase == "first_pick":
-        st.subheader("Pick your first card")
-    elif st.session_state.phase == "second_pick":
-        st.subheader("Pick Again (same or switch)")
+    # top header & score handled in card rendering block above
+    pass
 
-# ---------------- Page: Final Summary (and GitHub upload) ----------------
+# ---------------- Page: Final Summary & GitHub upload ----------------
 if st.session_state.page == "summary":
+    # ensure no Next button or 'you won' text shown here -- clean summary
     st.title("🎉 Experiment Complete!")
     st.markdown(f"### 💰 Final points: {st.session_state.points} points")
     total_correct = int(st.session_state.experiment_log['result'].sum())
@@ -394,7 +386,7 @@ if st.session_state.page == "summary":
     st.subheader("Experiment Log")
     st.dataframe(st.session_state.experiment_log, use_container_width=True)
 
-    # Try upload to GitHub
+    # Upload to GitHub
     try:
         token = st.secrets["GITHUB_TOKEN"]
         g = Github(token)
@@ -406,9 +398,4 @@ if st.session_state.page == "summary":
     except Exception as e:
         st.error(f"⚠️ Couldn't save to GitHub: {e}")
 
-    # Optionally offer a download as well
-    st.download_button("💾 Download CSV", st.session_state.experiment_log.to_csv(index=False), file_name=f"{st.session_state.player_name}_experiment_log.csv")
-
-
-
-
+   
