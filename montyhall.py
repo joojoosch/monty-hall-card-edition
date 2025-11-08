@@ -7,7 +7,7 @@ from github import Github
 st.set_page_config(page_title="Card Game Experiment", page_icon="🏆", layout="wide")
 
 trial_runs_required = 10
-max_experiment_rounds = 6  # 2 rounds × 3 trials each
+experiment_trials_per_round = 3  # 2 rounds × 3 trials each
 
 # --- Initialize session state ---
 if "player_name" not in st.session_state:
@@ -21,7 +21,7 @@ if "trial_log" not in st.session_state:
 if "experiment_round" not in st.session_state:
     st.session_state.experiment_round = 0
 if "current_round_set" not in st.session_state:
-    st.session_state.current_round_set = 1
+    st.session_state.current_round_set = 1  # 1 = Round1, 2 = Round2
 if "experiment_log" not in st.session_state:
     st.session_state.experiment_log = pd.DataFrame(columns=["round_number","first_choice","flipped_card","second_choice","trophy_card","result","phase_type","points_after_round","switch_win","stay_win"])
 if "cards" not in st.session_state:
@@ -107,9 +107,16 @@ if st.session_state.page == "trial":
     elif st.session_state.phase=="second_pick":
         st.subheader("Pick Again (same or switch)")
     st.write(f"Trial runs completed: **{st.session_state.trial_runs_done}/{trial_runs_required}**")
-    if st.session_state.game_over and st.button("Next"):
-        reset_game()
-        st.rerun()
+
+    # Button on top: Next or See Results
+    if st.session_state.trial_runs_done < trial_runs_required:
+        if st.session_state.game_over and st.button("Next"):
+            reset_game()
+            st.rerun()
+    else:
+        if st.session_state.game_over and st.button("📄 See Results"):
+            st.session_state.page = "trial_summary"
+            st.rerun()
 
 # ---------------- TRIAL / EXPERIMENT CARD LOGIC ----------------
 if st.session_state.page in ["trial","round1","round2"]:
@@ -174,32 +181,7 @@ if st.session_state.game_over:
             st.session_state.trial_log = pd.concat([st.session_state.trial_log,new_row],ignore_index=True)
             st.session_state.trial_runs_done +=1
             st.session_state.logged_this_round = True
-            if st.session_state.trial_runs_done >= trial_runs_required:
-                st.info("✅ You completed 10 trial runs.")
-                if st.button("📄 See Results"):
-                    st.session_state.page = "trial_summary"
-                    st.rerun()
 
-# ---------------- PAGE: Trial Summary ----------------
-if st.session_state.page=="trial_summary":
-    st.title("📄 Trial Summary")
-    st.write(f"Total trials completed: {st.session_state.trial_runs_done}")
-    total_switch_wins = st.session_state.trial_log['switch_win'].sum()
-    total_stay_wins = st.session_state.trial_log['stay_win'].sum()
-    st.write(f"Wins by switching: {total_switch_wins}")
-    st.write(f"Wins by staying: {total_stay_wins}")
-    col1,col2 = st.columns(2)
-    with col1:
-        if st.button("🔄 Another 10 Trial Rounds"):
-            st.session_state.trial_runs_done = 0
-            st.session_state.trial_log = pd.DataFrame(columns=st.session_state.trial_log.columns)
-            st.session_state.page="trial"
-            reset_game()
-            st.rerun()
-    with col2:
-        if st.button("🚀 Go to Real Experiment"):
-            st.session_state.page="round1_instr"
-            st.rerun()
 
 
 
