@@ -172,6 +172,17 @@ if st.session_state.game_over:
             st.session_state.trial_runs_done+=1
             st.session_state.logged_this_round=True
 
+    # ---------------- Next / See Results Button ----------------
+    if st.session_state.page=="trial":
+        if st.session_state.trial_runs_done < trial_runs_required:
+            if st.button("Next"):
+                reset_game()
+                st.rerun()
+        else:
+            if st.button("📄 See Results"):
+                st.session_state.page="trial_summary"
+                st.rerun()
+
 # ----------------- Trial Summary Page -----------------
 if st.session_state.page=="trial_summary":
     st.title("📄 Trial Summary")
