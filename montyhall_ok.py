@@ -197,6 +197,7 @@ if st.session_state.game_over:
             "first_choice": st.session_state.first_choice,
             "flipped_card": st.session_state.flipped_card,
             "second_choice": st.session_state.second_choice,
+            "trophy_card": st.session_state.trophy_pos,
             "result": won,
             "phase_type": phase_type
         }])
